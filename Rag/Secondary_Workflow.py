@@ -9,14 +9,45 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.messages import HumanMessage
 from Rag.llm import llm
 
+
+
 class QAState(TypedDict):
     query: str
     token_size: int
+    file_path: str
+    file_type: str
+    documents: List[Document]
+    chunks: List[Document]
     vector_store: Chroma
     k_similar_chunks: List[Document]
     context: str
     prompt: str
     llm_response: str
+
+def Load_Documents(state: QAState) -> QAState:
+    document_processor = DocumentProcessor()
+    file_path = state["file_path"]
+    file_type = state["file_type"]
+    file_info = FileInfo(
+        file_path=file_path,
+        file_type=file_type
+    )
+
+    documents = document_processor.Load_Document(file_info=file_info)
+    return {"documents": documents}
+
+def Create_Chunks(state: QAState) -> QAState:
+    document_processor = DocumentProcessor()
+    documents = state["documents"]
+    chunks = document_processor.Split_Document_Objects(documents)
+    return {"chunks": chunks}
+
+def Convert_Chunks_And_Store_In_Vector_Store(state: QAState) -> QAState:
+    chromadb_vector_store = ChromadbVectorStoreManager()
+    chunks = state["chunks"]
+    chromadb_vector_store.Convert_And_Store(chunks)
+
+    return {"vector_store": chromadb_vector_store}
 
 def Retrieve_k_Most_Similar_Chunks(state: QAState) -> QAState:
     query = state["query"]
@@ -89,53 +120,27 @@ def Generation(state: QAState) -> QAState:
 graph = StateGraph(QAState)
 
 #add nodes
+graph.add_node("Load_Documents", Load_Documents)
+graph.add_node("Create_Chunks", Create_Chunks)
+graph.add_node("Convert_Chunks_And_Store_In_Vector_Store", Convert_Chunks_And_Store_In_Vector_Store)
 graph.add_node("Retrieve_k_Most_Similar_Chunks", Retrieve_k_Most_Similar_Chunks)
 graph.add_node("build_context", build_context)
 graph.add_node("Augumentation", Augumentation)
 graph.add_node("Generation", Generation)
 
 #add edges
-graph.add_edge(START, "Retrieve_k_Most_Similar_Chunks")
+graph.add_edge(START, "Load_Documents")
+graph.add_edge("Load_Documents", "Create_Chunks")
+graph.add_edge("Create_Chunks", "Convert_Chunks_And_Store_In_Vector_Store")
+graph.add_edge("Convert_Chunks_And_Store_In_Vector_Store", "Retrieve_k_Most_Similar_Chunks")
 graph.add_edge("Retrieve_k_Most_Similar_Chunks", "build_context")
 graph.add_edge("build_context", "Augumentation")
 graph.add_edge("Augumentation", "Generation")
 graph.add_edge("Generation", END)
 
 
-def Load_Documents(file_info: FileInfo, document_processor: DocumentProcessor) -> List[Document]:
-    documents = document_processor.Load_Document(file_info=file_info)
-    return documents
-
-def Create_Chunks(document_processor: DocumentProcessor, documents: List[Document]) -> List[Document]:
-    chunks = document_processor.Split_Document_Objects(documents)
-    return chunks
-
-def Convert_Chunks_And_Store_In_Vector_Store(chunks: List[Document], vector_store_manager: Chroma) -> None:
-    vector_store_manager.Convert_And_Store(chunks)
-
 def Execute_Workflow(query: str, file_info: FileInfo):
-    document_processor = DocumentProcessor()
-    documents = Load_Documents(file_info, document_processor)
-    chunks = Create_Chunks(document_processor, documents)
-
-    vector_store_manager = ChromadbVectorStoreManager()
-    Convert_Chunks_And_Store_In_Vector_Store(chunks, vector_store_manager)
-
     workflow = graph.compile()
-
-    while True:
-        query = input("You: ")
-
-        if query.lower() in ["exit", "quit", "q", "bye"]:
-            print("Goodbye 👋")
-            break
-
-        initial_state = {
-            "query": query,
-            "token_size": 5000,
-            "vector_store": vector_store_manager
-        }
-
-        result = workflow.invoke(initial_state)
-        print("\nAI:", result["llm_response"])
-
+    initial_state = {"query": query, "token_size": 5000, "file_path": file_info.file_path, "file_type": file_info.file_type}
+    result = workflow.invoke(initial_state)
+    return result

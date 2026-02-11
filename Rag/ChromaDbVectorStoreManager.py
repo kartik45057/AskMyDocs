@@ -2,6 +2,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from typing import List
+from Rag.embeddings import embeddings
 from Rag.models import Query
 import os
 
@@ -9,24 +10,10 @@ import os
 class ChromadbVectorStoreManager:
     """Manage Faiss vector store with embedding conversion and storage with persistence"""
     def __init__(self, persist_directory = "./chroma_persistent_db", collection_name = "default_collection"):
-        #initialize embedding model
-        """
-        connects to huggingface.io | Downloads model(first time only) | caches locally into ~/.cache/huggingface/
-        loads model into memory
-        configures where the model runs | device = cpu(for running on cpu), device = cuda(for runnning on gpu)
-        'normalize_embeddings': True | to make sure that all vectors have equal length for better similarity comparision
-        """
-        self.embeddings = HuggingFaceEmbeddings(
-            model = "sentence-transformers/all-mpnet-base-v2",
-            model_kwargs = {'device': 'cpu'},
-            encode_kwargs = {'normalize_embeddings': True}
-        )
-
+        self.embeddings = embeddings
         self.persist_directory = persist_directory
         self.collection_name = collection_name
-
         self.vectorstore = self.Initialize_Vectorstore()
-
 
     def Initialize_Vectorstore(self) -> Chroma:
         """
