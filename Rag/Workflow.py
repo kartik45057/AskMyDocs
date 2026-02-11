@@ -1,5 +1,6 @@
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, List
+from Rag.ChromaDbVectorStoreManager import ChromadbVectorStoreManager
 from Rag.DocumentProcessor import DocumentProcessor
 from Rag.FaissVectorStoreManager import FaissVectorStoreManager
 from Rag.models import FileInfo, Query
@@ -42,16 +43,17 @@ def Create_Chunks(state: QAState) -> QAState:
     return {"chunks": chunks}
 
 def Convert_Chunks_And_Store_In_Vector_Store(state: QAState) -> QAState:
-    faiss_vector_store = FaissVectorStoreManager()
+    chromadb_vector_store = ChromadbVectorStoreManager()
     chunks = state["chunks"]
-    faiss_vector_store.Convert_And_Store(chunks)
+    chromadb_vector_store.Convert_And_Store(chunks)
 
-    return {"vector_store": faiss_vector_store}
+    return {"vector_store": chromadb_vector_store}
 
 def Retrieve_k_Most_Similar_Chunks(state: QAState) -> QAState:
     query = state["query"]
     query = Query(
-        query=query
+        query=query,
+        k=5
     )
     vector_store = state["vector_store"]
     k_similar_chunks = vector_store.search(query)
@@ -112,7 +114,7 @@ def Generation(state: QAState) -> QAState:
 
     response = llm.invoke(messages)
 
-    return {"llm_response": response}
+    return {"llm_response": response.content}
 
 
 graph = StateGraph(QAState)

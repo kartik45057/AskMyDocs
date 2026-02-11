@@ -5,3 +5,4 @@ __pycache__/
 *.pyd
 venv/
 .venv/
+chroma_persistent_db
