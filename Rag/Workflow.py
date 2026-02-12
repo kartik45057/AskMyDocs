@@ -15,6 +15,7 @@ vector_store_manager = None
 
 class QAState(TypedDict):
     query: str
+    rewritten_query: str
     token_size: int
     k_similar_chunks: List[Document]
     context: str

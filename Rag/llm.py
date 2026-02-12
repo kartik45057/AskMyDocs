@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 
 load_dotenv()
 
