@@ -7,7 +7,7 @@ file_info = FileInfo(
         file_path="C:\\Users\\karti\\Downloads\\python-basics-a-practical-introduction-to-python-3.pdf",
         file_type="pdf"
 )
-Execute_Workflow("explain numpy in detail with examples", file_info)
+Execute_Workflow(file_info)
 
 
 

@@ -1,11 +1,9 @@
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from typing import List
 from Rag.embeddings import embeddings
 from Rag.models import Query
 import os
-
 
 class ChromadbVectorStoreManager:
     """Manage Faiss vector store with embedding conversion and storage with persistence"""
@@ -22,6 +20,7 @@ class ChromadbVectorStoreManager:
         Returns: 
             Chroma vector store instance
         """
+
         try:
             if os.path.exists(self.persist_directory):
                 return Chroma(
@@ -40,13 +39,13 @@ class ChromadbVectorStoreManager:
             raise e
 
     def Convert_And_Store(self, chunks: List[Document]) -> None:
-        
         """
-        Convert chunks to embeddings and store in FAISS
+        Convert chunks to embeddings and store in vecror database
     
         Args:
             chunks: List[Document]
         """
+
         try:
             self.vectorstore.add_documents(chunks)
         except Exception as e:
@@ -63,6 +62,7 @@ class ChromadbVectorStoreManager:
         Returns:
             List of k most similar documents
         """
+
         query = args.query
         k = args.k
         try:
@@ -75,7 +75,7 @@ class ChromadbVectorStoreManager:
     
     def search_with_score(self, args: Query) -> List[Document]:
         """
-        Search for similar documents
+        Search for similar documents with similarity score
 
         Args:
             query: search query from the user
@@ -84,6 +84,7 @@ class ChromadbVectorStoreManager:
         Returns:
             Tuples of k most similar documents with scores(Document, score)
         """
+
         query = args.query
         k = args.k
         try:

@@ -1,22 +1,26 @@
+import uuid
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict, List
 from Rag.ChromaDbVectorStoreManager import ChromadbVectorStoreManager
 from Rag.DocumentProcessor import DocumentProcessor
-from Rag.FaissVectorStoreManager import FaissVectorStoreManager
 from Rag.models import FileInfo, Query
 from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessage
+from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import messages_from_dict
 from Rag.llm import llm
+
+vector_store_manager = None
 
 class QAState(TypedDict):
     query: str
     token_size: int
-    vector_store: Chroma
     k_similar_chunks: List[Document]
     context: str
     prompt: str
     llm_response: str
+    messages: List[BaseMessage]
 
 def Retrieve_k_Most_Similar_Chunks(state: QAState) -> QAState:
     query = state["query"]
@@ -24,8 +28,7 @@ def Retrieve_k_Most_Similar_Chunks(state: QAState) -> QAState:
         query=query,
         k=5
     )
-    vector_store = state["vector_store"]
-    k_similar_chunks = vector_store.search(query)
+    k_similar_chunks = vector_store_manager.search(query)
     return {"k_similar_chunks": k_similar_chunks}
 
 def build_context(state: QAState) -> QAState:
@@ -79,11 +82,20 @@ def Augumentation(state: QAState) -> QAState:
 
 def Generation(state: QAState) -> QAState:
     prompt = state["prompt"]
-    messages = [HumanMessage(content=prompt)]
+    raw_history = state.get("messages", [])
 
+    if raw_history and isinstance(raw_history[0], dict):
+        history = messages_from_dict(raw_history)
+    else:
+        history = raw_history
+        
+    messages = history + [prompt]
     response = llm.invoke(messages)
 
-    return {"llm_response": response.content}
+    history.append(HumanMessage(content=state["query"]))
+    history.append(AIMessage(content=response.content))
+
+    return {"llm_response": response.content, "messages": history}
 
 
 graph = StateGraph(QAState)
@@ -113,29 +125,30 @@ def Create_Chunks(document_processor: DocumentProcessor, documents: List[Documen
 def Convert_Chunks_And_Store_In_Vector_Store(chunks: List[Document], vector_store_manager: Chroma) -> None:
     vector_store_manager.Convert_And_Store(chunks)
 
-def Execute_Workflow(query: str, file_info: FileInfo):
+def Execute_Workflow(file_info: FileInfo) -> None:
+    global vector_store_manager
     document_processor = DocumentProcessor()
     documents = Load_Documents(file_info, document_processor)
     chunks = Create_Chunks(document_processor, documents)
 
     vector_store_manager = ChromadbVectorStoreManager()
     Convert_Chunks_And_Store_In_Vector_Store(chunks, vector_store_manager)
-
-    workflow = graph.compile()
+    memory = MemorySaver()
+    workflow = graph.compile(checkpointer=memory)
+    thread_id = str(uuid.uuid4())
 
     while True:
         query = input("You: ")
 
-        if query.lower() in ["exit", "quit", "q", "bye"]:
+        if query.lower() in ["exit", "quit", "q", "bye", "goodbye"]:
             print("Goodbye 👋")
             break
 
         initial_state = {
             "query": query,
-            "token_size": 5000,
-            "vector_store": vector_store_manager
+            "token_size": 5000
         }
 
-        result = workflow.invoke(initial_state)
+        config = {"configurable": {"thread_id": thread_id}}
+        result = workflow.invoke(initial_state, config=config)
         print("\nAI:", result["llm_response"])
-
