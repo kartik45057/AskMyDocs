@@ -23,8 +23,43 @@ class QAState(TypedDict):
     llm_response: str
     messages: List[BaseMessage]
 
-def Retrieve_k_Most_Similar_Chunks(state: QAState) -> QAState:
+def Rewrite_Query(state: QAState) -> QAState:
     query = state["query"]
+    raw_history = state.get("messages", [])
+
+    if raw_history and isinstance(raw_history[0], dict):
+        history = messages_from_dict(raw_history)
+    else:
+        history = raw_history
+
+    # Build conversation text
+    conversation_text = ""
+    for msg in history:
+        role = "User" if isinstance(msg, HumanMessage) else "AI"
+        conversation_text += f"{role}: {msg.content}\n"
+
+    rewrite_prompt = f"""
+        You are a query rewriting assistant.
+
+        Rewrite the user's latest question into a standalone question
+        that includes necessary context from the conversation history.
+
+        Conversation History:
+        {conversation_text}
+
+        Latest Question:
+        {query}
+
+        Rewritten standalone question:
+    """
+
+    response = llm.invoke([HumanMessage(content=rewrite_prompt)])
+    rewritten_query = response.content.strip()
+    return {"rewritten_query": rewritten_query}
+
+
+def Retrieve_k_Most_Similar_Chunks(state: QAState) -> QAState:
+    query = state.get("rewritten_query", state["query"])
     query = Query(
         query=query,
         k=5
@@ -102,13 +137,15 @@ def Generation(state: QAState) -> QAState:
 graph = StateGraph(QAState)
 
 #add nodes
+graph.add_node("Rewrite_Query", Rewrite_Query)
 graph.add_node("Retrieve_k_Most_Similar_Chunks", Retrieve_k_Most_Similar_Chunks)
 graph.add_node("build_context", build_context)
 graph.add_node("Augumentation", Augumentation)
 graph.add_node("Generation", Generation)
 
 #add edges
-graph.add_edge(START, "Retrieve_k_Most_Similar_Chunks")
+graph.add_edge(START, "Rewrite_Query")
+graph.add_edge("Rewrite_Query", "Retrieve_k_Most_Similar_Chunks")
 graph.add_edge("Retrieve_k_Most_Similar_Chunks", "build_context")
 graph.add_edge("build_context", "Augumentation")
 graph.add_edge("Augumentation", "Generation")
